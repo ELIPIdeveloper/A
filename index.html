@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تشخیص گفتار فارسی زنده با Vosk</title>
+    <style>
+        body { font-family: Tahoma, sans-serif; text-align:center; margin:20px; }
+        button { padding:10px 20px; font-size:16px; margin:10px; cursor:pointer; }
+        #result { margin-top:20px; padding:10px; border:1px solid #ccc; min-height:50px; background-color:#f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>تشخیص گفتار فارسی زنده</h1>
+    <button id="startBtn">شروع زنده</button>
+    <button id="stopBtn" disabled>توقف</button>
+    <div id="result">متن زنده در اینجا نمایش داده می‌شود...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js"></script>
+    <script>
+        let recognizer, audioContext, mediaStream, processor;
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const resultDiv = document.getElementById('result');
+
+        async function startLiveRecognition() {
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            // ایجاد AudioContext
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const source = audioContext.createMediaStreamSource(mediaStream);
+            processor = audioContext.createScriptProcessor(4096, 1, 1);
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+
+            // بارگذاری مدل فارسی Vosk
+            const model = await Vosk.createModel('https://alphacephei.com/vosk/models/vosk-model-small-fa-0.4.zip');
+            recognizer = new model.Recognizer({ sampleRate: audioContext.sampleRate });
+
+            processor.onaudioprocess = (event) => {
+                const inputData = event.inputBuffer.getChannelData(0);
+                const intData = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    intData[i] = inputData[i] * 32768;
+                }
+
+                // ارسال داده به Recognizer
+                recognizer.acceptWaveform(intData);
+                // نمایش نتیجه زنده
+                const partial = recognizer.partialResult().partial;
+                resultDiv.innerText = partial;
+            };
+        }
+
+        function stopLiveRecognition() {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+
+            processor.disconnect();
+            mediaStream.getTracks().forEach(track => track.stop());
+            audioContext.close();
+
+            // نمایش نتیجه نهایی
+            const finalText = recognizer.finalResult().text;
+            resultDiv.innerText = finalText;
+        }
+
+        startBtn.addEventListener('click', startLiveRecognition);
+        stopBtn.addEventListener('click', stopLiveRecognition);
+    </script>
+</body>
+</html>
