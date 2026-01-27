@@ -1,104 +1,102 @@
 <!DOCTYPE html>
 <html lang="fa">
 <head>
-  <meta charset="UTF-8">
-  <title>Rear Camera Dual View + Hand Tracking</title>
-
-  <!-- MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      background: black;
-    }
-
-    video, canvas {
-      width: 100%;
-      height: 50vh;
-      display: block;
-      object-fit: cover;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>تشخیص دست برای App Inventor</title>
+<style>
+  body, html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #000;
+  }
+  #videoElement {
+    width: 100%;
+    height: 50vh; /* نصف ارتفاع صفحه */
+    object-fit: cover;
+  }
+</style>
 </head>
 <body>
 
-  <!-- نمایش اول -->
-  <video id="video" autoplay muted playsinline></video>
+<video id="videoElement" autoplay playsinline></video>
 
-  <!-- نمایش دوم -->
-  <canvas id="canvas"></canvas>
+<script type="module">
+  // وارد کردن MediaPipe Hands و Camera
+  import {Hands} from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
+  import {Camera} from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
 
-  <script>
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
+  const videoElement = document.getElementById('videoElement');
 
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight / 2;
-    }
-    resize();
-    window.addEventListener("resize", resize);
+  // تنظیمات شناسایی دست
+  const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  });
 
-    // MediaPipe Hands
-    const hands = new Hands({
-      locateFile: file =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
+  hands.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.5
+  });
 
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7
-    });
+  // تابع شناسایی gesture و ارسال به App Inventor
+  hands.onResults((results) => {
+    if (results.multiHandLandmarks) {
+      results.multiHandLandmarks.forEach((landmarks, index) => {
 
-    hands.onResults(results => {
-      // 👇 نمایش تصویر در canvas (علت اصلی حل مشکل)
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const thumbTip = landmarks[4];
+        const indexTip = landmarks[8];
+        const middleTip = landmarks[12];
+        const ringTip = landmarks[16];
+        const pinkyTip = landmarks[20];
+        const wrist = landmarks[0];
 
-      if (!results.multiHandLandmarks) return;
+        // فاصله شست و اشاره
+        const distanceThumbIndex = Math.hypot(
+          thumbTip.x - indexTip.x,
+          thumbTip.y - indexTip.y
+        );
 
-      const lm = results.multiHandLandmarks[0];
+        // تشخیص gesture ساده
+        let gesture = "open";
 
-      // ===== Position =====
-      const wrist = lm[0];
-      console.log("Position:", {
-        x: wrist.x.toFixed(2),
-        y: wrist.y.toFixed(2),
-        z: wrist.z.toFixed(2)
+        // Pinch (چسباندن شست و اشاره)
+        if (distanceThumbIndex < 0.05) {
+          gesture = "pinch";
+        }
+
+        // Fist (مشت کردن)
+        const fist = [thumbTip, indexTip, middleTip, ringTip, pinkyTip].every(pt => pt.y > wrist.y);
+        if (fist) {
+          gesture = "fist";
+        }
+
+        // آماده سازی داده JSON برای App Inventor
+        const data = {
+          hand: index + 1,
+          gesture: gesture,
+          pinchDistance: distanceThumbIndex.toFixed(3)
+        };
+
+        // ارسال به App Inventor WebView
+        if (window.AppInventor) {
+          window.AppInventor.setWebViewString(JSON.stringify(data));
+        }
       });
+    }
+  });
 
-      // ===== FIST =====
-      const tips = [8, 12, 16, 20];
-      const isFist = tips.every(i => lm[i].y > lm[i - 2].y);
-      if (isFist) console.log("Gesture: FIST ✊");
+  // راه‌اندازی دوربین
+  const camera = new Camera(videoElement, {
+    onFrame: async () => {
+      await hands.send({image: videoElement});
+    },
+    width: 1280,
+    height: 720
+  });
+  camera.start();
 
-      // ===== PINCH =====
-      const pinchDist = Math.hypot(
-        lm[4].x - lm[8].x,
-        lm[4].y - lm[8].y
-      );
-      if (pinchDist < 0.04) console.log("Gesture: PINCH 🤏");
-    });
-
-    // Camera (Rear)
-    const camera = new Camera(video, {
-      onFrame: async () => {
-        await hands.send({ image: video });
-      },
-      width: 1280,
-      height: 720,
-      facingMode: "environment"
-    });
-
-    camera.start();
-  </script>
-
+</script>
 </body>
 </html>
