@@ -1,99 +1,87 @@
 <!DOCTYPE html>
-<html lang="fa">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>تشخیص دست برای App Inventor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hand Tracking JSON Output</title>
 <style>
-  body, html {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    background: #000;
-  }
-  #videoElement {
-    width: 100%;
-    height: 50vh; /* نصف ارتفاع صفحه */
-    object-fit: cover;
+  body { margin: 0; overflow: hidden; }
+  video { 
+    width: 100vw; 
+    height: 50vh; 
+    object-fit: cover; 
+    display: block; 
   }
 </style>
 </head>
 <body>
 
-<video id="videoElement" autoplay playsinline></video>
+<video id="video" autoplay playsinline></video>
 
 <script type="module">
-  import {Hands} from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
-  import {drawConnectors, drawLandmarks} from 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js';
+import {Hands} from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
+import {Camera} from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
 
-  const videoElement = document.getElementById('videoElement');
+// گرفتن ویدیو
+const videoElement = document.getElementById('video');
 
-  // دریافت ویدیو از دوربین
-  async function startCamera() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      videoElement.srcObject = stream;
-      await videoElement.play();
-      startHandsDetection();
-    } catch (err) {
-      console.error("دوربین در دسترس نیست:", err);
-    }
-  }
+const hands = new Hands({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
 
-  // تنظیم MediaPipe Hands
-  function startHandsDetection() {
-    const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.5
+});
 
-    hands.setOptions({
-      maxNumHands: 2,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.5
-    });
+// وقتی دست پیدا شد
+hands.onResults((results) => {
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    const landmarks = results.multiHandLandmarks[0].map(l => ({x: l.x, y: l.y, z: l.z}));
+    
+    // ساده‌سازی تشخیص gestures
+    let gesture = "unknown";
+    const thumbTip = landmarks[4];
+    const indexTip = landmarks[8];
+    const middleTip = landmarks[12];
+    const ringTip = landmarks[16];
+    const pinkyTip = landmarks[20];
+    const wrist = landmarks[0];
 
-    hands.onResults((results) => {
-      if (results.multiHandLandmarks) {
-        results.multiHandLandmarks.forEach((landmarks, index) => {
-          const thumbTip = landmarks[4];
-          const indexTip = landmarks[8];
-          const wrist = landmarks[0];
-
-          // فاصله شست و اشاره
-          const distanceThumbIndex = Math.hypot(
-            thumbTip.x - indexTip.x,
-            thumbTip.y - indexTip.y
-          );
-
-          let gesture = "open";
-          if (distanceThumbIndex < 0.05) gesture = "pinch";
-
-          const fist = [4,8,12,16,20].every(i => landmarks[i].y > wrist.y);
-          if (fist) gesture = "fist";
-
-          const data = {
-            hand: index + 1,
-            gesture: gesture,
-            pinchDistance: distanceThumbIndex.toFixed(3)
-          };
-
-          if (window.AppInventor) {
-            window.AppInventor.setWebViewString(JSON.stringify(data));
-          }
-        });
-      }
-    });
-
-    // حلقه پردازش ویدیو
-    async function processFrame() {
-      await hands.send({image: videoElement});
-      requestAnimationFrame(processFrame);
+    // مشت کردن: فاصله انگشتان به هم نزدیک باشه
+    const distIndexWrist = Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y);
+    const distThumbWrist = Math.hypot(thumbTip.x - wrist.x, thumbTip.y - wrist.y);
+    if (distIndexWrist < 0.1 && distThumbWrist < 0.1) {
+      gesture = "fist";
     }
 
-    processFrame();
-  }
+    // اشاره و شست: فاصله کم بین انگشت اشاره و شست
+    const distThumbIndex = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+    if (distThumbIndex < 0.05) {
+      gesture = "pinch";
+    }
 
-  startCamera();
+    // ارسال JSON به اپ اینونتور
+    const output = {
+      gesture: gesture,
+      landmarks: landmarks
+    };
+    // اینجا می‌تونید از fetch یا websocket برای ارسال به سرور یا اپ اینونتور استفاده کنید
+    console.log(JSON.stringify(output));
+  }
+});
+
+// راه‌اندازی دوربین
+const camera = new Camera(videoElement, {
+  onFrame: async () => {
+    await hands.send({image: videoElement});
+  },
+  width: 640,
+  height: 480
+});
+camera.start();
 </script>
 
 </body>
