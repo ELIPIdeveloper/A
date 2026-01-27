@@ -22,81 +22,79 @@
 <video id="videoElement" autoplay playsinline></video>
 
 <script type="module">
-  // وارد کردن MediaPipe Hands و Camera
   import {Hands} from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
-  import {Camera} from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
+  import {drawConnectors, drawLandmarks} from 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js';
 
   const videoElement = document.getElementById('videoElement');
 
-  // تنظیمات شناسایی دست
-  const hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-  });
-
-  hands.setOptions({
-    maxNumHands: 2,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.5
-  });
-
-  // تابع شناسایی gesture و ارسال به App Inventor
-  hands.onResults((results) => {
-    if (results.multiHandLandmarks) {
-      results.multiHandLandmarks.forEach((landmarks, index) => {
-
-        const thumbTip = landmarks[4];
-        const indexTip = landmarks[8];
-        const middleTip = landmarks[12];
-        const ringTip = landmarks[16];
-        const pinkyTip = landmarks[20];
-        const wrist = landmarks[0];
-
-        // فاصله شست و اشاره
-        const distanceThumbIndex = Math.hypot(
-          thumbTip.x - indexTip.x,
-          thumbTip.y - indexTip.y
-        );
-
-        // تشخیص gesture ساده
-        let gesture = "open";
-
-        // Pinch (چسباندن شست و اشاره)
-        if (distanceThumbIndex < 0.05) {
-          gesture = "pinch";
-        }
-
-        // Fist (مشت کردن)
-        const fist = [thumbTip, indexTip, middleTip, ringTip, pinkyTip].every(pt => pt.y > wrist.y);
-        if (fist) {
-          gesture = "fist";
-        }
-
-        // آماده سازی داده JSON برای App Inventor
-        const data = {
-          hand: index + 1,
-          gesture: gesture,
-          pinchDistance: distanceThumbIndex.toFixed(3)
-        };
-
-        // ارسال به App Inventor WebView
-        if (window.AppInventor) {
-          window.AppInventor.setWebViewString(JSON.stringify(data));
-        }
-      });
+  // دریافت ویدیو از دوربین
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      videoElement.srcObject = stream;
+      await videoElement.play();
+      startHandsDetection();
+    } catch (err) {
+      console.error("دوربین در دسترس نیست:", err);
     }
-  });
+  }
 
-  // راه‌اندازی دوربین
-  const camera = new Camera(videoElement, {
-    onFrame: async () => {
+  // تنظیم MediaPipe Hands
+  function startHandsDetection() {
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.5
+    });
+
+    hands.onResults((results) => {
+      if (results.multiHandLandmarks) {
+        results.multiHandLandmarks.forEach((landmarks, index) => {
+          const thumbTip = landmarks[4];
+          const indexTip = landmarks[8];
+          const wrist = landmarks[0];
+
+          // فاصله شست و اشاره
+          const distanceThumbIndex = Math.hypot(
+            thumbTip.x - indexTip.x,
+            thumbTip.y - indexTip.y
+          );
+
+          let gesture = "open";
+          if (distanceThumbIndex < 0.05) gesture = "pinch";
+
+          const fist = [4,8,12,16,20].every(i => landmarks[i].y > wrist.y);
+          if (fist) gesture = "fist";
+
+          const data = {
+            hand: index + 1,
+            gesture: gesture,
+            pinchDistance: distanceThumbIndex.toFixed(3)
+          };
+
+          if (window.AppInventor) {
+            window.AppInventor.setWebViewString(JSON.stringify(data));
+          }
+        });
+      }
+    });
+
+    // حلقه پردازش ویدیو
+    async function processFrame() {
       await hands.send({image: videoElement});
-    },
-    width: 1280,
-    height: 720
-  });
-  camera.start();
+      requestAnimationFrame(processFrame);
+    }
 
+    processFrame();
+  }
+
+  startCamera();
 </script>
+
 </body>
 </html>
