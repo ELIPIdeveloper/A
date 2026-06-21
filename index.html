@@ -1,87 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hand Tracking JSON Output</title>
-<style>
-  body { margin: 0; overflow: hidden; }
-  video { 
-    width: 100vw; 
-    height: 50vh; 
-    object-fit: cover; 
-    display: block; 
-  }
-</style>
+  <meta charset="UTF-8">
+  <title>Offline AI</title>
 </head>
 <body>
 
-<video id="video" autoplay playsinline></video>
+<h3>AI آفلاین</h3>
 
-<script type="module">
-import {Hands} from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
-import {Camera} from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
+<input id="input" placeholder="پیام بنویس">
+<button onclick="send()">ارسال</button>
 
-// گرفتن ویدیو
-const videoElement = document.getElementById('video');
+<p id="output"></p>
 
-const hands = new Hands({
-  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
+<script src="https://unpkg.com/@mlc-ai/web-llm"></script>
 
-hands.setOptions({
-  maxNumHands: 1,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.5
-});
+<script>
+let engine;
 
-// وقتی دست پیدا شد
-hands.onResults((results) => {
-  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-    const landmarks = results.multiHandLandmarks[0].map(l => ({x: l.x, y: l.y, z: l.z}));
-    
-    // ساده‌سازی تشخیص gestures
-    let gesture = "unknown";
-    const thumbTip = landmarks[4];
-    const indexTip = landmarks[8];
-    const middleTip = landmarks[12];
-    const ringTip = landmarks[16];
-    const pinkyTip = landmarks[20];
-    const wrist = landmarks[0];
+async function init() {
+    engine = await webllm.CreateMLCEngine("Phi-3-mini");
+    document.getElementById("output").innerText = "AI آماده است";
+}
 
-    // مشت کردن: فاصله انگشتان به هم نزدیک باشه
-    const distIndexWrist = Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y);
-    const distThumbWrist = Math.hypot(thumbTip.x - wrist.x, thumbTip.y - wrist.y);
-    if (distIndexWrist < 0.1 && distThumbWrist < 0.1) {
-      gesture = "fist";
-    }
+async function send() {
+    const text = document.getElementById("input").value;
 
-    // اشاره و شست: فاصله کم بین انگشت اشاره و شست
-    const distThumbIndex = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
-    if (distThumbIndex < 0.05) {
-      gesture = "pinch";
-    }
+    const reply = await engine.chat.completions.create({
+        messages: [{ role: "user", content: text }]
+    });
 
-    // ارسال JSON به اپ اینونتور
-    const output = {
-      gesture: gesture,
-      landmarks: landmarks
-    };
-    // اینجا می‌تونید از fetch یا websocket برای ارسال به سرور یا اپ اینونتور استفاده کنید
-    console.log(JSON.stringify(output));
-  }
-});
+    document.getElementById("output").innerText =
+        reply.choices[0].message.content;
+}
 
-// راه‌اندازی دوربین
-const camera = new Camera(videoElement, {
-  onFrame: async () => {
-    await hands.send({image: videoElement});
-  },
-  width: 640,
-  height: 480
-});
-camera.start();
+init();
 </script>
 
 </body>
