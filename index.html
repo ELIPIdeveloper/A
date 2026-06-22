@@ -1,41 +1,24 @@
 <!DOCTYPE html>
-<html>
+<html lang="fa" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <title>Offline AI</title>
+<meta charset="UTF-8">
+<title>STT فارسی آفلاین</title>
+<style>
+body{font-family:tahoma;max-width:900px;margin:auto;padding:20px}
+button{padding:10px;margin:5px}
+textarea{width:100%;height:250px;font-size:18px}
+</style>
 </head>
 <body>
 
-<h3>AI آفلاین</h3>
+<h2>گفتار به متن فارسی (کاملاً آفلاین)</h2>
 
-<input id="input" placeholder="پیام بنویس">
-<button onclick="send()">ارسال</button>
+<button onclick="loadModel()">دانلود/بارگذاری مدل</button>
+<input type="file" id="audio">
+<button onclick="run()">تبدیل</button>
 
-<p id="output"></p>
+<textarea id="out"></textarea>
 
-<script src="https://unpkg.com/@mlc-ai/web-llm"></script>
-
-<script>
-let engine;
-
-async function init() {
-    engine = await webllm.CreateMLCEngine("Phi-3-mini");
-    document.getElementById("output").innerText = "AI آماده است";
-}
-
-async function send() {
-    const text = document.getElementById("input").value;
-
-    const reply = await engine.chat.completions.create({
-        messages: [{ role: "user", content: text }]
-    });
-
-    document.getElementById("output").innerText =
-        reply.choices[0].message.content;
-}
-
-init();
-</script>
-
+<script type="module" src="app.js"></script>
 </body>
 </html>
