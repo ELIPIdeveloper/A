@@ -1,24 +1,88 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa">
 <head>
 <meta charset="UTF-8">
-<title>STT فارسی آفلاین</title>
-<style>
-body{font-family:tahoma;max-width:900px;margin:auto;padding:20px}
-button{padding:10px;margin:5px}
-textarea{width:100%;height:250px;font-size:18px}
-</style>
+<title>Whisper فارسی زنده</title>
 </head>
+
 <body>
 
-<h2>گفتار به متن فارسی (کاملاً آفلاین)</h2>
+<h2>🎤 تبدیل زنده گفتار به متن فارسی</h2>
 
-<button onclick="loadModel()">دانلود/بارگذاری مدل</button>
-<input type="file" id="audio">
-<button onclick="run()">تبدیل</button>
+<button onclick="start()">شروع</button>
+<button onclick="stop()">توقف</button>
 
-<textarea id="out"></textarea>
+<pre id="out"></pre>
 
-<script type="module" src="app.js"></script>
+<script type="module">
+
+import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers";
+
+let mediaRecorder;
+let audioChunks = [];
+let running = false;
+let transcriber;
+
+// لود مدل Whisper
+async function loadModel() {
+    document.getElementById("out").innerText = "در حال لود مدل...";
+    
+    transcriber = await pipeline(
+        "automatic-speech-recognition",
+        "Xenova/whisper-base"
+    );
+
+    document.getElementById("out").innerText = "آماده ✔";
+}
+
+loadModel();
+
+window.start = async function () {
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    mediaRecorder = new MediaRecorder(stream);
+    running = true;
+
+    mediaRecorder.ondataavailable = async (e) => {
+        audioChunks.push(e.data);
+
+        if (mediaRecorder.state === "inactive") return;
+
+        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+        audioChunks = [];
+
+        const arrayBuffer = await audioBlob.arrayBuffer();
+
+        document.getElementById("out").innerText = "در حال پردازش...";
+
+        const result = await transcriber(arrayBuffer);
+
+        document.getElementById("out").innerText += "\n" + result.text;
+    };
+
+    mediaRecorder.start();
+
+    // هر 4 ثانیه یک chunk جدید
+    const interval = setInterval(() => {
+        if (!running) {
+            clearInterval(interval);
+            return;
+        }
+
+        if (mediaRecorder.state === "recording") {
+            mediaRecorder.stop();
+            mediaRecorder.start();
+        }
+    }, 4000);
+};
+
+window.stop = function () {
+    running = false;
+    mediaRecorder.stop();
+};
+
+</script>
+
 </body>
 </html>
